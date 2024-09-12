@@ -41,7 +41,7 @@ def get_ip(ip_type, index="default"):
     """
     if index is False:  # disabled
         return False
-    elif type(index) == list:  # 如果获取到的规则是列表，则依次判断列表中每一个规则，直到找到一个可以正确获取到的IP
+    elif type(index) is list:  # 如果获取到的规则是列表，则依次判断列表中每一个规则，直到找到一个可以正确获取到的IP
         value = None
         for i in index:
             value = get_ip(ip_type, i)
@@ -69,9 +69,9 @@ def get_ip(ip_type, index="default"):
 def change_dns_record(dns, proxy_list, **kw):
     for proxy in proxy_list:
         if not proxy or (proxy.upper() in ['DIRECT', 'NONE']):
-            dns.PROXY = None
+            dns.Config.PROXY = None
         else:
-            dns.PROXY = proxy
+            dns.Config.PROXY = proxy
         record_type, domain = kw['record_type'], kw['domain']
         print('\n%s %s(%s) ==> %s [via %s]' %
               (asctime(), domain, record_type, kw['ip'], proxy))
@@ -104,6 +104,7 @@ def update_ip(ip_type, cache, dns, proxy_list):
     record_type = (ip_type == '4') and 'A' or 'AAAA'
     update_fail = False  # https://github.com/NewFuture/DDNS/issues/16
     for domain in domains:
+        domain = domain.lower()  # https://github.com/NewFuture/DDNS/issues/431
         if change_dns_record(dns, proxy_list, domain=domain, ip=address, record_type=record_type):
             update_fail = True
     if cache is not False:
@@ -137,15 +138,20 @@ def main():
     proxy_list = proxy if isinstance(
         proxy, list) else proxy.strip('; ').replace(',', ';').split(';')
 
-    cache = get_config('cache', True)
-    cache = cache is True and path.join(gettempdir(), 'ddns.cache') or cache
-    cache = Cache(cache)
+    cache_config = get_config('cache', True)
+    if cache_config is False:
+        cache = cache_config
+    elif cache_config is True:
+        cache = Cache(path.join(gettempdir(), 'ddns.cache'))
+    else:
+        cache = Cache(cache_config)
+
     if cache is False:
         info("Cache is disabled!")
     elif get_config("config_modified_time") is None or get_config("config_modified_time") >= cache.time:
         warning("Cache file is out of dated.")
         cache.clear()
-    elif not cache:
+    else:
         debug("Cache is empty.")
     update_ip('4', cache, dns, proxy_list)
     update_ip('6', cache, dns, proxy_list)
